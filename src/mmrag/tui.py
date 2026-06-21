@@ -43,7 +43,8 @@ SETTINGS_FIELDS = [
     ("database_url", "Postgres URL (used when store = postgres)", False),
     ("pg_table", "Postgres table", False),
     ("max_chunk_tokens", "Max chunk tokens", False),
-    ("chunk_overlap_tokens", "Chunk overlap tokens", False),
+    ("ollama_base_url", "Ollama Base URL (e.g. http://localhost:11434)", False),
+    ("ollama_model", "Ollama Model", False),
 ]
 
 WELCOME = (

@@ -109,6 +109,8 @@ def answer_question(
 
     if CONFIG.use_anthropic:
         return _generate_with_claude(question, results, retrieved)
+    if CONFIG.use_ollama:
+        return _generate_with_ollama(question, results, retrieved)
     return _extractive_fallback(question, results, retrieved)
 
 
@@ -216,6 +218,81 @@ def _generate_with_claude(
         model=CONFIG.generation_model,
     )
 
+
+def _generate_with_ollama(
+    question: str, results: list[RetrievalResult], retrieved: list[dict]
+) -> AnswerResult:
+    import json
+    import urllib.request
+    
+    context_blocks = []
+    for i, r in enumerate(results):
+        text = r.chunk.metadata.get("parent_text", r.chunk.text)
+        label = r.chunk.citation_label()
+        context_blocks.append(f"Document [{i}] ({label}):\n{text}\n")
+        
+    context_str = "\n".join(context_blocks)
+    
+    prompt = f"""{SYSTEM_PROMPT}
+
+You must cite your sources by using the Document index, e.g. [0] or [1].
+If you cannot answer the question using the documents, say "I don't have a sourced answer for that in the indexed documents."
+
+DOCUMENTS:
+{context_str}
+
+QUESTION: {question}
+ANSWER:
+"""
+
+    url = f"{CONFIG.ollama_base_url.rstrip('/')}/api/generate"
+    data = json.dumps({
+        "model": CONFIG.ollama_model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": 0.2}
+    }).encode("utf-8")
+    
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode())
+            answer = result.get("response", "").strip()
+    except Exception as e:
+        answer = f"Error communicating with local Ollama: {e}"
+        
+    unsupported = "i don't have a sourced answer" in answer.lower()
+    
+    citations = []
+    if not unsupported and not answer.startswith("Error"):
+        import re
+        matches = set(re.findall(r"\[(\d+)\]", answer))
+        for m in matches:
+            idx = int(m)
+            if idx < len(results):
+                chunk = results[idx].chunk
+                citations.append(
+                    Citation(
+                        chunk_id=chunk.chunk_id,
+                        doc_id=chunk.doc_id,
+                        label=chunk.citation_label(),
+                        cited_text="[Local LLM Citation]",
+                        page=chunk.page_start,
+                        section_number=chunk.section_number,
+                        url=chunk.url,
+                        superseded_by=chunk.superseded_by,
+                    )
+                )
+                
+    return AnswerResult(
+        question=question,
+        answer=answer,
+        citations=citations,
+        retrieved=retrieved,
+        unsupported=unsupported,
+        warnings=["Ollama citations are approximate."] if citations else [],
+        model=f"ollama/{CONFIG.ollama_model}",
+    )
 
 def _extractive_fallback(
     question: str, results: list[RetrievalResult], retrieved: list[dict]

@@ -12,12 +12,11 @@ logger = logging.getLogger(__name__)
 
 def extract_triplets(chunk: Chunk) -> list[Triplet]:
     """Use the LLM to extract entity triplets from a chunk."""
-    if not CONFIG.use_anthropic or not CONFIG.use_graphrag:
+    if not (CONFIG.use_anthropic or CONFIG.use_ollama) or not CONFIG.use_graphrag:
         return []
         
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=CONFIG.anthropic_api_key)
+        from ..agent import _call_llm
         
         prompt = f"""Extract key entities and their relationships from the text below.
 Output a JSON array of objects with 'subject', 'predicate', and 'object' keys.
@@ -26,14 +25,13 @@ Do not output anything except the JSON array.
 
 Text: {chunk.text}
 """
-        resp = client.messages.create(
-            model=CONFIG.generation_model,
-            max_tokens=512,
-            temperature=0.1,
+        text = _call_llm(
+            prompt, 
             system="You are a knowledge graph extractor. Return ONLY a JSON array.",
-            messages=[{"role": "user", "content": prompt}],
+            json_format=True,
+            temperature=0.1
         )
-        text = resp.content[0].text.strip()
+        
         if text.startswith("```json"):
             text = text[7:-3]
         elif text.startswith("```"):

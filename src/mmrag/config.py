@@ -41,6 +41,8 @@ PERSISTED = {
     "prefer_latest_revision",
     "use_hyde",
     "use_graphrag",
+    "ollama_base_url",
+    "ollama_model",
 }
 
 
@@ -55,6 +57,10 @@ class Config:
     # --- Keys (empty = offline; set from the TUI settings screen) ---
     anthropic_api_key: str | None = None
     voyage_api_key: str | None = None
+    
+    # --- Local LLM (Ollama) ---
+    ollama_base_url: str | None = None  # e.g. "http://localhost:11434"
+    ollama_model: str = "llama3"
 
     # --- Vector store: Postgres + pgvector (or in-memory) ---
     database_url: str = "postgresql://mmrag:mmrag@localhost:5432/mmrag"
@@ -98,6 +104,10 @@ class Config:
     @property
     def use_anthropic(self) -> bool:
         return bool(self.anthropic_api_key)
+
+    @property
+    def use_ollama(self) -> bool:
+        return bool(self.ollama_base_url)
 
     # --- Persistence ---
     @classmethod
