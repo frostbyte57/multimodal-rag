@@ -16,6 +16,23 @@ docs/PDFs ──▶ Parse (text, tables, images) ──▶ Semantic Chunking ─
 
 ---
 
+## Architecture
+
+The system uses a robust "find-and-synthesize" pipeline powered by a combination of LangGraph orchestration, local/cloud LLMs, and enterprise databases (PostgreSQL and Neo4j). It surpasses standard vector RAG implementations by weaving together several advanced retrieval paradigms:
+
+1. **Agentic Query Optimization**: 
+   When a user submits a query, an initial LLM pass evaluates the prompt. If weak, it performs **Query Expansion** to generate multiple stronger sub-queries, and uses **HyDE (Hypothetical Document Embeddings)** to generate synthetic answers, capturing semantic intent before the search even begins.
+2. **Knowledge Graph Traversal (GraphRAG)**: 
+   During ingestion, LLMs extract entities and relationships (triplets) from documents, storing them in **Neo4j**. At query time, the system matches entities in the expanded queries and traverses the knowledge graph to return related contextual subgraphs.
+3. **Hybrid Multimodal Search**: 
+   Text, tables, and images are embedded via Voyage and stored in **PostgreSQL (pgvector)**. Dense vector search is fused with BM25 exact-keyword search using **Reciprocal Rank Fusion (RRF)** to ensure extreme recall accuracy across multimodal contexts.
+4. **Parent-Child Virtual Chunking**: 
+   Large document sections are chunked dynamically. Child chunks carry their parent section's context, ensuring that specific details (like a single row in a table) are grounded in their broader meaning.
+5. **Synthesis & Verifiable Citations**: 
+   The retrieved text, image paths, and GraphRAG subgraphs are passed to the generation model (Claude Opus or local Ollama). The model synthesizes the final answer while enforcing strict, line-level source citations that map directly back to the original documents.
+
+---
+
 ## Directory Structure
 
 - `src/mmrag/`: Core implementation (schema, storage, embedding, generation, TUI).
