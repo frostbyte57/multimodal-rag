@@ -84,6 +84,8 @@ class Chunk:
     caption: str | None = None
     # Set when a newer revision of the same doc supersedes this chunk's doc.
     superseded_by: str | None = None
+    # For parent-child chunking: points to the containing section's full chunk
+    parent_chunk_id: str | None = None
 
     @staticmethod
     def make_id(doc_id: str, version: str, section_number: str, ordinal: int) -> str:

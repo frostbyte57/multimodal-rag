@@ -36,6 +36,13 @@ def chunk_document(doc: ParsedDoc) -> list[Chunk]:
         text_buffer: list[str] = []
         buffer_meta: str | None = None
         buffer_page = section.page_start
+        
+        # Build the full section text for parent-child context
+        section_full_text = "\n\n".join(
+            b.text for b in section.blocks if b.chunk_type == ChunkType.TEXT.value
+        ).strip()
+        if not section_full_text:
+            section_full_text = None
 
         def flush_text() -> None:
             nonlocal ordinal, text_buffer, buffer_meta, buffer_page
@@ -45,7 +52,8 @@ def chunk_document(doc: ParsedDoc) -> list[Chunk]:
             for piece, page in _split_to_budget(body, buffer_page):
                 chunks.append(
                     _make_chunk(meta, section, breadcrumb, piece, page,
-                                ChunkType.TEXT.value, buffer_meta, ordinal)
+                                ChunkType.TEXT.value, buffer_meta, ordinal,
+                                parent_text=section_full_text)
                 )
                 ordinal += 1
             text_buffer = []
@@ -57,7 +65,8 @@ def chunk_document(doc: ParsedDoc) -> list[Chunk]:
                 table_text = f"Table in section {breadcrumb}:\n{block.text}"
                 chunks.append(
                     _make_chunk(meta, section, breadcrumb, table_text, block.page,
-                                ChunkType.TABLE.value, block.meta_raw, ordinal)
+                                ChunkType.TABLE.value, block.meta_raw, ordinal,
+                                parent_text=section_full_text)
                 )
                 ordinal += 1
             elif block.chunk_type == ChunkType.IMAGE.value:
@@ -67,7 +76,8 @@ def chunk_document(doc: ParsedDoc) -> list[Chunk]:
                 chunks.append(
                     _make_chunk(meta, section, breadcrumb, img_text, block.page,
                                 ChunkType.IMAGE.value, block.meta_raw, ordinal,
-                                image_path=block.image_path, caption=caption)
+                                image_path=block.image_path, caption=caption,
+                                parent_text=section_full_text)
                 )
                 ordinal += 1
             else:
@@ -122,6 +132,7 @@ def _make_chunk(
     ordinal: int,
     image_path: str | None = None,
     caption: str | None = None,
+    parent_text: str | None = None,
 ) -> Chunk:
     metadata: dict[str, Any] = dict(meta.metadata)  # doc-level tags
     metadata.update(parse_meta_annotation(meta_raw))  # section-level tags
@@ -131,6 +142,9 @@ def _make_chunk(
         merged = set(codes) | set(existing if isinstance(existing, list) else
                                   ([existing] if existing else []))
         metadata["codes"] = sorted(merged)
+        
+    if parent_text:
+        metadata["parent_text"] = parent_text
 
     return Chunk(
         chunk_id=Chunk.make_id(meta.doc_id, meta.version, section.number, ordinal),
