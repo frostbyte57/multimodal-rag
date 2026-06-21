@@ -13,6 +13,7 @@ runs with zero setup; switch to Postgres/Voyage/Claude from the settings screen.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any
@@ -31,7 +32,9 @@ PERSISTED = {
     "voyage_api_key",
     "database_url",
     "pg_table",
-    "vector_in_memory",
+    "neo4j_uri",
+    "neo4j_user",
+    "neo4j_password",
     "max_chunk_tokens",
     "chunk_overlap_tokens",
     "dense_top_k",
@@ -62,10 +65,14 @@ class Config:
     ollama_base_url: str | None = None  # e.g. "http://localhost:11434"
     ollama_model: str = "llama3"
 
-    # --- Vector store: Postgres + pgvector (or in-memory) ---
-    database_url: str = "postgresql://mmrag:mmrag@localhost:5432/mmrag"
+    # --- Vector store: Postgres + pgvector ---
+    database_url: str = os.getenv("DATABASE_URL", "postgresql://mmrag:mmrag@localhost:5432/mmrag")
     pg_table: str = "chunks"
-    vector_in_memory: bool = True  # default offline; switch to pgvector in the TUI
+
+    # --- Graph store: Neo4j ---
+    neo4j_uri: str = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    neo4j_user: str = os.getenv("NEO4J_USER", "neo4j")
+    neo4j_password: str = os.getenv("NEO4J_PASSWORD", "mmrag_neo4j")
 
     # --- Chunking ---
     max_chunk_tokens: int = 500
@@ -92,11 +99,6 @@ class Config:
     @property
     def bm25_index_path(self) -> Path:
         return ROOT / "data" / "bm25.pkl"
-        
-    @property
-    def graph_index_path(self) -> Path:
-        return ROOT / "data" / "graph.json"
-
     @property
     def use_voyage(self) -> bool:
         return bool(self.voyage_api_key)

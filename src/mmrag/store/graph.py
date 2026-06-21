@@ -1,11 +1,12 @@
-"""Lightweight In-Memory Knowledge Graph."""
+"""Neo4j Knowledge Graph Store."""
 
 from __future__ import annotations
 
-import json
-from collections import defaultdict
-from dataclasses import asdict, dataclass
-from pathlib import Path
+import logging
+from dataclasses import dataclass
+from ..config import CONFIG
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Triplet:
@@ -16,52 +17,81 @@ class Triplet:
 
 class GraphStore:
     def __init__(self) -> None:
-        self.triplets: list[Triplet] = []
-        self.adj: dict[str, set[str]] = defaultdict(set)
+        self.uri = CONFIG.neo4j_uri
+        self.user = CONFIG.neo4j_user
+        self.password = CONFIG.neo4j_password
+        self._driver = None
         
+    def _get_driver(self):
+        if not self._driver:
+            try:
+                from neo4j import GraphDatabase
+                self._driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
+            except Exception as e:
+                logger.error(f"Failed to connect to Neo4j: {e}")
+        return self._driver
+
     def add_triplets(self, triplets: list[Triplet]) -> None:
-        for t in triplets:
-            self.triplets.append(t)
-            s = t.subject.lower()
-            o = t.object.lower()
-            self.adj[s].add(o)
-            self.adj[o].add(s)
+        driver = self._get_driver()
+        if not driver or not triplets:
+            return
+            
+        query = """
+        UNWIND $triplets AS t
+        MERGE (s:Entity {name: toLower(t.subject)})
+        MERGE (o:Entity {name: toLower(t.object)})
+        MERGE (s)-[r:RELATES_TO {type: t.predicate, chunk_id: t.chunk_id}]->(o)
+        """
+        try:
+            with driver.session() as session:
+                session.run(query, triplets=[{
+                    "subject": t.subject,
+                    "predicate": t.predicate,
+                    "object": t.object,
+                    "chunk_id": t.chunk_id
+                } for t in triplets])
+        except Exception as e:
+            logger.error(f"Failed to write triplets to Neo4j: {e}")
 
     def extract_subgraph(self, keywords: list[str], max_depth: int = 1) -> list[Triplet]:
-        """Extract all triplets within max_depth of any keyword."""
-        if not self.triplets:
+        """Extract all triplets within max_depth of any keyword using Neo4j Cypher query."""
+        driver = self._get_driver()
+        if not driver or not keywords:
             return []
             
-        frontier = set(k.lower() for k in keywords)
-        visited = set(frontier)
-        
-        for _ in range(max_depth):
-            next_frontier = set()
-            for node in frontier:
-                for neighbor in self.adj.get(node, []):
-                    if neighbor not in visited:
-                        visited.add(neighbor)
-                        next_frontier.add(neighbor)
-            frontier = next_frontier
-            
+        query = f"""
+        UNWIND $keywords AS kw
+        MATCH (s:Entity)-[r:RELATES_TO*1..{max_depth}]-(o:Entity)
+        WHERE s.name CONTAINS toLower(kw) OR o.name CONTAINS toLower(kw)
+        UNWIND r AS rel
+        RETURN startNode(rel).name AS subject,
+               rel.type AS predicate,
+               endNode(rel).name AS object,
+               rel.chunk_id AS chunk_id
+        LIMIT 100
+        """
         subgraph = []
-        for t in self.triplets:
-            if t.subject.lower() in visited or t.object.lower() in visited:
-                subgraph.append(t)
+        try:
+            with driver.session() as session:
+                result = session.run(query, keywords=keywords)
+                seen = set()
+                for record in result:
+                    t = Triplet(
+                        subject=record["subject"],
+                        predicate=record["predicate"],
+                        object=record["object"],
+                        chunk_id=record["chunk_id"],
+                    )
+                    key = (t.subject, t.predicate, t.object)
+                    if key not in seen:
+                        seen.add(key)
+                        subgraph.append(t)
+        except Exception as e:
+            logger.error(f"Failed to query subgraph from Neo4j: {e}")
+            
         return subgraph
-
-    def save(self, path: Path) -> None:
-        data = [asdict(t) for t in self.triplets]
-        path.write_text(json.dumps(data, indent=2))
         
-    @classmethod
-    def load(cls, path: Path) -> "GraphStore":
-        store = cls()
-        if path.exists():
-            try:
-                data = json.loads(path.read_text())
-                triplets = [Triplet(**d) for d in data]
-                store.add_triplets(triplets)
-            except Exception:
-                pass
-        return store
+    def close(self):
+        if self._driver:
+            self._driver.close()
+            self._driver = None

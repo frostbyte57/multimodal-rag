@@ -42,6 +42,9 @@ SETTINGS_FIELDS = [
     ("embedding_dim", "Embedding dimension", False),
     ("database_url", "Postgres URL (used when store = postgres)", False),
     ("pg_table", "Postgres table", False),
+    ("neo4j_uri", "Neo4j URI", False),
+    ("neo4j_user", "Neo4j User", False),
+    ("neo4j_password", "Neo4j Password", True),
     ("max_chunk_tokens", "Max chunk tokens", False),
     ("ollama_base_url", "Ollama Base URL (e.g. http://localhost:11434)", False),
     ("ollama_model", "Ollama Model", False),
@@ -89,11 +92,6 @@ class SettingsScreen(ModalScreen[dict | None]):
     def compose(self) -> ComposeResult:
         with VerticalScroll(id="box"):
             yield Static("Settings — saved to .mmrag.json", classes="title")
-            yield Label("Vector store (memory or postgres)")
-            yield Input(
-                value="memory" if CONFIG.vector_in_memory else "postgres",
-                id="cfg-store",
-            )
             for key, label, pw in SETTINGS_FIELDS:
                 yield Label(label)
                 val = getattr(CONFIG, key)
@@ -106,8 +104,7 @@ class SettingsScreen(ModalScreen[dict | None]):
         if event.button.id == "cancel":
             self.dismiss(None)
             return
-        store = self.query_one("#cfg-store", Input).value.strip().lower()
-        result: dict = {"vector_in_memory": not store.startswith("p")}
+        result: dict = {}
         for key, _, _ in SETTINGS_FIELDS:
             result[key] = self.query_one(f"#cfg-{key}", Input).value
         self.dismiss(result)

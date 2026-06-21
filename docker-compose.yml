@@ -1,20 +1,54 @@
+version: '3.8'
+
 services:
-  postgres:
-    image: pgvector/pgvector:pg17
-    container_name: multimodal_rag
+  app:
+    build: .
+    image: mmrag-app:latest
     environment:
-      POSTGRES_DB: mmrag
+      - DATABASE_URL=postgresql://mmrag:mmrag@postgres:5432/mmrag
+      - NEO4J_URI=bolt://neo4j:7687
+    volumes:
+      - ./data:/app/data
+      - ./.mmrag.json:/app/.mmrag.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
       POSTGRES_USER: mmrag
       POSTGRES_PASSWORD: mmrag
+      POSTGRES_DB: mmrag
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mmrag -d mmrag"]
+      test: ["CMD-SHELL", "pg_isready -U mmrag"]
       interval: 5s
-      timeout: 3s
-      retries: 10
+      timeout: 5s
+      retries: 5
+
+  neo4j:
+    image: neo4j:latest
+    environment:
+      NEO4J_AUTH: neo4j/mmrag_neo4j
+    ports:
+      - "7474:7474" # HTTP
+      - "7687:7687" # Bolt
+    volumes:
+      - neo4jdata:/data
+    healthcheck:
+      test: ["CMD", "wget", "http://localhost:7474", "-O", "-"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   pgdata:
+  neo4jdata:

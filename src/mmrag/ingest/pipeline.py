@@ -65,12 +65,13 @@ def ingest(corpus_dir: Path | None = None, verbose: bool = True) -> list[Chunk]:
         from ..store.graph import GraphStore
         from .graph import extract_triplets
         graph = GraphStore()
+        count = 0
         for chunk in chunks:
             triplets = extract_triplets(chunk)
             if triplets:
                 graph.add_triplets(triplets)
-        graph.save(CONFIG.graph_index_path)
+                count += len(triplets)
         if verbose:
-            print(f"Built GraphRAG index ({len(graph.triplets)} triplets) → {CONFIG.graph_index_path}")
+            print(f"Built GraphRAG index ({count} triplets) → Neo4j")
 
     return chunks

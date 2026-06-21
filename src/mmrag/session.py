@@ -48,9 +48,11 @@ class RagSession:
         self.vs = get_vector_store()
         self.vs.recreate(self.embedder.dim)
         self.bm25 = BM25Index()
+        from .store.graph import GraphStore
+        self.graph = GraphStore()
         self.chunks: list[Chunk] = []
         self._ingested: set[str] = set()
-        self.retriever = HybridRetriever(self.vs, self.bm25, self.embedder, self.reranker)
+        self.retriever = HybridRetriever(self.vs, self.bm25, self.embedder, self.reranker, graph=self.graph)
 
     # -- stats --------------------------------------------------------------
     @property
@@ -68,8 +70,8 @@ class RagSession:
     @property
     def backend_label(self) -> str:
         emb = "voyage" if CONFIG.use_voyage else "hash(offline)"
-        store = "in-memory" if CONFIG.vector_in_memory else "pgvector"
-        gen = CONFIG.generation_model if CONFIG.use_anthropic else "offline-extractive"
+        store = "pgvector"
+        gen = CONFIG.generation_model if CONFIG.use_anthropic else ("ollama" if CONFIG.use_ollama else "offline-extractive")
         return f"store:{store} · embed:{emb} · gen:{gen}"
 
     # -- ingestion ----------------------------------------------------------
@@ -100,8 +102,16 @@ class RagSession:
             self.vs.upsert(new_chunks, vectors)
             self.chunks.extend(new_chunks)
             self.bm25.build(self.chunks)  # rebuild over the full set
+            
+            if CONFIG.use_graphrag:
+                from .ingest.graph import extract_triplets
+                for chunk in new_chunks:
+                    triplets = extract_triplets(chunk)
+                    if triplets:
+                        self.graph.add_triplets(triplets)
+                        
             self.retriever = HybridRetriever(
-                self.vs, self.bm25, self.embedder, self.reranker
+                self.vs, self.bm25, self.embedder, self.reranker, graph=self.graph
             )
         return added_files, len(new_chunks), errors
 

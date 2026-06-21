@@ -31,7 +31,7 @@ def load_retriever() -> HybridRetriever:
     vs = get_vector_store()
     bm25 = BM25Index.load(CONFIG.bm25_index_path)
     from .store.graph import GraphStore
-    graph = GraphStore.load(CONFIG.graph_index_path)
+    graph = GraphStore()
     return HybridRetriever(vs, bm25, embedder, reranker=get_reranker(), graph=graph)
 
 
