@@ -1,0 +1,169 @@
+# Evaluation set: engineer questions with expected sources.
+#
+# Each item:
+#   id            unique key
+#   question      the user query
+#   filters       optional metadata filters {part_family, doc_type, version}
+#   pin_version   optional explicit revision pin
+#   expect        list of expected sources {doc, section, version?}; a retrieval
+#                 is a "hit" if any expected source appears in the top-k chunks.
+#   expect_unsupported: true  for questions that SHOULD have no grounded answer
+#
+# Metrics computed by eval/eval.py:
+#   - retrieval recall@k   (did an expected source make the top-k?)
+#   - citation accuracy    (did the answer cite an expected source?)
+
+- id: gtp_max_rate
+  question: "What is the maximum GTP transceiver line rate on the Artix-7 XC7A35T?"
+  expect:
+    - {doc: DS181, section: "2.1", version: v1.8}
+  notes: "Revision conflict: v1.8 says 6.6 Gb/s, v1.5 says 3.75. Must prefer v1.8."
+
+- id: gtp_max_rate_pinned
+  question: "What was the maximum GTP line rate in the v1.5 Artix-7 datasheet?"
+  pin_version: v1.5
+  expect:
+    - {doc: DS181, section: "2.1", version: v1.5}
+  notes: "User explicitly pins an older revision."
+
+- id: gtp_min_rate
+  question: "What is the minimum supported GTP line rate on Artix-7?"
+  expect:
+    - {doc: DS181, section: "2.1"}
+
+- id: gtp_refclk_freq
+  question: "What frequency range is required for the Artix-7 GTP MGTREFCLK reference clock?"
+  expect:
+    - {doc: DS181, section: "2.2"}
+
+- id: vccint_voltage
+  question: "What is the recommended VCCINT internal supply voltage for a standard Artix-7 device?"
+  expect:
+    - {doc: DS181, section: "3.1", version: v1.8}
+
+- id: vccaux_voltage
+  question: "What is the VCCAUX auxiliary supply voltage for Artix-7?"
+  expect:
+    - {doc: DS181, section: "3.1"}
+
+- id: power_ramp
+  question: "What is the allowed VCCINT power-on ramp time for Artix-7, and what happens if it ramps too slowly?"
+  expect:
+    - {doc: DS181, section: "3.2"}
+
+- id: io_current
+  question: "What is the maximum DC current per I/O pin on Artix-7 at LVCMOS33?"
+  expect:
+    - {doc: DS181, section: "4.1"}
+
+- id: config_modes
+  question: "Which configuration modes are supported on 7 series FPGAs and how are they selected?"
+  filters: {doc_type: user_guide}
+  expect:
+    - {doc: UG470, section: "1.1"}
+
+- id: spi_quad
+  question: "How do I enable Quad (x4) SPI configuration on a 7 series FPGA?"
+  expect:
+    - {doc: UG470, section: "2.1"}
+
+- id: cclk_default
+  question: "What is the default CCLK frequency after power-up in Master SPI mode?"
+  expect:
+    - {doc: UG470, section: "2"}
+
+- id: done_not_asserting
+  question: "Configuration DONE pin is not asserting in Master SPI mode. What should I check?"
+  expect:
+    - {doc: UG470, section: "2.2"}
+
+- id: selectmap_crc
+  question: "How does the FPGA signal a CRC error during SelectMAP configuration?"
+  expect:
+    - {doc: UG470, section: "3.1"}
+
+- id: jtag_priority
+  question: "Does JTAG configuration take priority over the mode pins on 7 series FPGAs?"
+  expect:
+    - {doc: UG470, section: "4"}
+
+- id: lvds_25
+  question: "What VCCO is required to use LVDS_25 outputs on Artix-7?"
+  expect:
+    - {doc: XAPP1234, section: "2.1"}
+
+- id: diff_term
+  question: "How do I enable internal 100 ohm differential termination on LVDS inputs?"
+  expect:
+    - {doc: XAPP1234, section: "2.2"}
+
+- id: idelay_refclk
+  question: "What reference clock frequency does IDELAYCTRL require for input delay calibration?"
+  expect:
+    - {doc: XAPP1234, section: "3.1"}
+
+- id: errata_pll_lock
+  question: "Are there known errata about the GTP PLL failing to lock at cold startup on Artix-7?"
+  filters: {doc_type: errata}
+  expect:
+    - {doc: EN191, section: "2.1"}
+
+- id: errata_es1_workaround
+  question: "What is the workaround for the GTP PLL lock failure on ES1 silicon?"
+  expect:
+    - {doc: EN191, section: "2.1"}
+
+- id: errata_rx_overflow
+  question: "Is there an errata about RX elastic buffer overflow at 6.6 Gb/s on the XC7A50T?"
+  expect:
+    - {doc: EN191, section: "2.2"}
+
+- id: errata_spi_x4
+  question: "Why does SPI x4 configuration fail on some flash devices for the XC7A100T, and does it affect production silicon?"
+  expect:
+    - {doc: EN191, section: "3.1"}
+
+- id: cyclone_rate
+  question: "What is the maximum transceiver data rate on a Cyclone IV GX device?"
+  filters: {part_family: Cyclone IV}
+  expect:
+    - {doc: CIV51001, section: "2.1"}
+
+- id: cyclone_por
+  question: "How fast does the Cyclone IV fast power-on reset release the device from reset?"
+  expect:
+    - {doc: CIV51001, section: "3.2"}
+
+- id: cross_family_negative
+  question: "What is the maximum HBM bandwidth on the Artix-7 XC7A35T?"
+  expect_unsupported: true
+  notes: "Artix-7 has no HBM; assistant must decline rather than hallucinate."
+
+# --- General (non-FPGA) document: StreamFlow data-platform guide ---
+- id: sf_exactly_once
+  question: "How does StreamFlow guarantee exactly-once processing?"
+  expect:
+    - {doc: SFG100, section: "3.1"}
+
+- id: sf_backpressure
+  question: "What does the StreamFlow ingestion gateway do when the processing plane lags?"
+  expect:
+    - {doc: SFG100, section: "2.1"}
+
+- id: sf_freshness
+  question: "What bounds query freshness lag in StreamFlow?"
+  expect:
+    - {doc: SFG100, section: "4.1"}
+
+- id: sf_architecture_figure
+  question: "Describe the StreamFlow high-level architecture and how the planes connect."
+  expect:
+    - {doc: SFG100, section: "1.1"}
+  notes: "§1.1 contains the architecture block-diagram figure (multimodal chunk)."
+
+- id: generic_metadata_filter
+  question: "What known issues affect the ES1 silicon stepping?"
+  filters: {stepping: ES1}
+  expect:
+    - {doc: EN191, section: "2.1"}
+  notes: "Exercises generic metadata filtering on an arbitrary domain key."

@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+data/bm25.pkl
+.pytest_cache/
+# Images extracted from ingested PDFs (the .md sample figures are committed).
+data/corpus/*_images/
+
+# Local configuration (may contain API keys) — written by the TUI settings screen
+.mmrag.json
