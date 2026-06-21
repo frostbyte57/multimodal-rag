@@ -30,7 +30,9 @@ def load_retriever() -> HybridRetriever:
     embedder = get_embedder()
     vs = get_vector_store()
     bm25 = BM25Index.load(CONFIG.bm25_index_path)
-    return HybridRetriever(vs, bm25, embedder, reranker=get_reranker())
+    from .store.graph import GraphStore
+    graph = GraphStore.load(CONFIG.graph_index_path)
+    return HybridRetriever(vs, bm25, embedder, reranker=get_reranker(), graph=graph)
 
 
 def build_in_memory_retriever(
@@ -53,4 +55,13 @@ def build_in_memory_retriever(
     bm25 = BM25Index()
     bm25.build(chunks)
 
-    return HybridRetriever(vs, bm25, embedder, reranker=get_reranker()), chunks
+    from .store.graph import GraphStore
+    from .ingest.graph import extract_triplets
+    graph = GraphStore()
+    if CONFIG.use_graphrag:
+        for chunk in chunks:
+            triplets = extract_triplets(chunk)
+            if triplets:
+                graph.add_triplets(triplets)
+
+    return HybridRetriever(vs, bm25, embedder, reranker=get_reranker(), graph=graph), chunks

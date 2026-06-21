@@ -60,4 +60,17 @@ def ingest(corpus_dir: Path | None = None, verbose: bool = True) -> list[Chunk]:
         store = "in-memory" if CONFIG.vector_in_memory else f"pgvector ({CONFIG.pg_table})"
         print(f"Embedded with {backend}, upserted to {store}")
 
+    # GraphRAG
+    if CONFIG.use_graphrag:
+        from ..store.graph import GraphStore
+        from .graph import extract_triplets
+        graph = GraphStore()
+        for chunk in chunks:
+            triplets = extract_triplets(chunk)
+            if triplets:
+                graph.add_triplets(triplets)
+        graph.save(CONFIG.graph_index_path)
+        if verbose:
+            print(f"Built GraphRAG index ({len(graph.triplets)} triplets) → {CONFIG.graph_index_path}")
+
     return chunks

@@ -39,6 +39,8 @@ PERSISTED = {
     "rrf_k",
     "rerank_top_n",
     "prefer_latest_revision",
+    "use_hyde",
+    "use_graphrag",
 }
 
 
@@ -69,6 +71,8 @@ class Config:
     rrf_k: int = 60
     rerank_top_n: int = 8
     prefer_latest_revision: bool = True
+    use_hyde: bool = False
+    use_graphrag: bool = False
 
     # --- Runtime-only paths (not persisted) ---
     @property
@@ -82,6 +86,10 @@ class Config:
     @property
     def bm25_index_path(self) -> Path:
         return ROOT / "data" / "bm25.pkl"
+        
+    @property
+    def graph_index_path(self) -> Path:
+        return ROOT / "data" / "graph.json"
 
     @property
     def use_voyage(self) -> bool:
