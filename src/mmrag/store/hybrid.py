@@ -29,11 +29,12 @@ class RetrievalResult:
 
 
 class HybridRetriever:
-    def __init__(self, vector_store, bm25: BM25Index, embedder: Embedder, reranker=None) -> None:
+    def __init__(self, vector_store, bm25: BM25Index, embedder: Embedder, reranker=None, graph=None) -> None:
         self.vs = vector_store
         self.bm25 = bm25
         self.embedder = embedder
         self.reranker = reranker
+        self.graph = graph
 
     def retrieve(
         self,
@@ -41,14 +42,42 @@ class HybridRetriever:
         filters: dict | None = None,
         top_n: int | None = None,
         pin_version: str | None = None,
+        expanded_queries: list[str] | None = None,
     ) -> list[RetrievalResult]:
         top_n = top_n or CONFIG.rerank_top_n
 
-        qvec = self.embedder.embed_query(query)
-        dense = self.vs.search(qvec, CONFIG.dense_top_k, filters)
-        bm = self.bm25.search(query, CONFIG.bm25_top_k)
-        # rank-bm25 can't filter; apply the same metadata filter post-hoc.
-        bm = [(c, s) for c, s in bm if passes_filter(c, filters)]
+        queries_to_run = expanded_queries if expanded_queries else [query]
+        dense: list[tuple[Chunk, float]] = []
+        bm: list[tuple[Chunk, float]] = []
+
+        for q in queries_to_run:
+            embed_text = q
+            if CONFIG.use_hyde:
+                from ..agent import generate_hyde_document
+                hyde_doc = generate_hyde_document(q)
+                if hyde_doc:
+                    embed_text = f"{q}\n{hyde_doc}"
+                    
+            qvec = self.embedder.embed_query(embed_text)
+            dense.extend(self.vs.search(qvec, CONFIG.dense_top_k, filters))
+            
+            # BM25 uses the pure lexical query (HyDE adds noise to exact match)
+            bm_res = self.bm25.search(q, CONFIG.bm25_top_k)
+            bm.extend([(c, s) for c, s in bm_res if passes_filter(c, filters)])
+
+        # Deduplicate chunks from multiple queries before RRF to prevent ranking bloat
+        def _dedupe(ranking: list[tuple[Chunk, float]]) -> list[tuple[Chunk, float]]:
+            seen = set()
+            out = []
+            # Sort by score descending to keep the best score for each chunk
+            for c, s in sorted(ranking, key=lambda x: x[1], reverse=True):
+                if c.chunk_id not in seen:
+                    seen.add(c.chunk_id)
+                    out.append((c, s))
+            return out
+            
+        dense = _dedupe(dense)
+        bm = _dedupe(bm)
 
         fused = _rrf_fuse(dense, bm, CONFIG.rrf_k)
 
@@ -61,6 +90,31 @@ class HybridRetriever:
             results = self.reranker.rerank(query, results, top_n)
         else:
             results = results[:top_n]
+            
+        if getattr(self, "graph", None) and CONFIG.use_graphrag:
+            from ..agent import extract_keywords
+            keywords = extract_keywords(query)
+            subgraph = self.graph.extract_subgraph(keywords, max_depth=1)
+            if subgraph:
+                text = "Knowledge Graph Context:\n" + "\n".join(
+                    f"- {t.subject} {t.predicate} {t.object}" for t in subgraph
+                )
+                graph_chunk = Chunk(
+                    chunk_id="graph_context",
+                    doc_id="Graph",
+                    text=text,
+                    title="Knowledge Graph",
+                    doc_type="graph",
+                    version="1",
+                    version_date="2099-01-01",
+                    section_number="1",
+                    section_path=["Graph"],
+                    page_start=1,
+                    page_end=1,
+                    chunk_type="text",
+                )
+                results.insert(0, RetrievalResult(graph_chunk, score=1.0, sources=["graph"]))
+                
         return results
 
 

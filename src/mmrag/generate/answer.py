@@ -88,7 +88,15 @@ def answer_question(
     filters: dict | None = None,
     pin_version: str | None = None,
 ) -> AnswerResult:
-    results = retriever.retrieve(question, filters=filters, pin_version=pin_version)
+    from ..agent import expand_query
+    expanded_queries = expand_query(question)
+    
+    results = retriever.retrieve(
+        question, 
+        filters=filters, 
+        pin_version=pin_version,
+        expanded_queries=expanded_queries
+    )
     retrieved = _retrieved_summary(results)
 
     if not results:
@@ -133,7 +141,7 @@ def _generate_with_claude(
                 "source": {
                     "type": "text",
                     "media_type": "text/plain",
-                    "data": r.chunk.text,
+                    "data": r.chunk.metadata.get("parent_text", r.chunk.text),
                 },
                 "title": r.chunk.citation_label(),
                 "citations": {"enabled": True},
